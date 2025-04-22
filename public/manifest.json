@@ -1,0 +1,24 @@
+{
+  "name": "커뮤니티 템플릿 앱",
+  "short_name": "커뮤니티 앱",
+  "description": "다양한 주제의 커뮤니티 앱을 생성할 수 있는 템플릿",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+} 
