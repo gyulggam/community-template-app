@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { 
@@ -16,7 +16,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BannerAd, useInterstitialAd } from "@/components/AdMob";
 import { Textarea } from "@/components/ui/textarea";
-import { getPostById, getCommentsByPostId } from "@/db/data";
+import { getPostById, getCommentsByPostId, incrementPostViews, createComment } from "@/db/supabase-helper";
 import { Post, Comment } from "@/db/models";
 import { ArrowLeft, MessageSquare, ThumbsUp, Eye, Check, Calendar } from "lucide-react";
 
@@ -31,61 +31,63 @@ export default function ForumPostDetail() {
   // 광고 설정
   const interstitialAd = useInterstitialAd();
   
-  useEffect(() => {
+  // 게시글 데이터 로드
+  const loadPostData = useCallback(async () => {
     if (params.id) {
-      // 게시글 데이터 로드
-      const postData = getPostById(Number(params.id));
-      
-      if (postData && postData.type === 'forum') {
-        setPost(postData);
+      try {
+        const postData = await getPostById(params.id as string);
         
-        // 댓글 데이터 로드
-        const commentsData = getCommentsByPostId(Number(params.id));
-        setComments(commentsData);
-      } else {
-        // 포럼 글이 아니거나 존재하지 않는 경우 목록으로 리다이렉트
-        router.push('/template/forum');
+        if (postData && postData.type === 'forum') {
+          setPost(postData);
+          
+          // 조회수 증가
+          incrementPostViews(params.id as string);
+          
+          // 댓글 데이터 로드
+          const commentsData = await getCommentsByPostId(params.id as string);
+          setComments(commentsData);
+        } else {
+          // 포럼 글이 아니거나 존재하지 않는 경우 목록으로 리다이렉트
+          router.push('/template/forum');
+        }
+      } catch (error) {
+        console.error('Error loading post data:', error);
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     }
   }, [params.id, router]);
   
-  const handleSubmitComment = () => {
+  useEffect(() => {
+    loadPostData();
+  }, [loadPostData]);
+  
+  const handleSubmitComment = async () => {
     if (newComment.trim() && post) {
-      // 실제 구현에서는 API 호출을 통해 댓글 저장
-      console.log("댓글 저장:", { postId: post.id, content: newComment });
-      
-      // 인터스티셜 광고 표시
-      if (interstitialAd.isLoaded) {
-        interstitialAd.show();
+      try {
+        // 새 댓글 생성
+        const result = await createComment({
+          content: newComment,
+          authorId: 'guest-user-id', // 실제 구현에서는 로그인한 사용자 ID 사용
+          postId: post.id,
+          likesCount: 0,
+          isAccepted: false
+        });
+        
+        // 인터스티셜 광고 표시
+        if (interstitialAd.isLoaded) {
+          interstitialAd.show();
+        }
+        
+        setNewComment("");
+        
+        if (result) {
+          // 댓글 목록에 새 댓글 추가
+          setComments([...comments, result]);
+        }
+      } catch (error) {
+        console.error('Error creating comment:', error);
       }
-      
-      setNewComment("");
-      
-      // 목업 댓글 추가 (실제 구현에서는 API 응답 데이터 사용)
-      const mockComment: Comment = {
-        id: Date.now(),
-        content: newComment,
-        authorId: 1, // 현재 로그인한 사용자 ID
-        author: {
-          id: 1,
-          username: 'kimdev',
-          displayName: '김개발',
-          email: 'kimdev@example.com',
-          avatar: '/avatars/avatar-1.png',
-          role: 'admin',
-          isVerified: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        postId: post.id,
-        likesCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      
-      setComments([...comments, mockComment]);
     }
   };
   
@@ -248,14 +250,16 @@ export default function ForumPostDetail() {
                       <Avatar className="w-8 h-8" />
                       <div>
                         <p className="font-semibold">{comment.author?.displayName || '알 수 없음'}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(comment.createdAt)}
+                        </p>
                       </div>
                     </div>
                     {comment.isAccepted && (
-                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs flex items-center">
+                      <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs flex items-center">
                         <Check className="w-3 h-3 mr-1" />
                         채택된 답변
-                      </span>
+                      </div>
                     )}
                   </div>
                 </CardHeader>
@@ -264,66 +268,17 @@ export default function ForumPostDetail() {
                 </CardContent>
                 <CardFooter className="flex justify-between border-t pt-4">
                   <div className="flex gap-4 text-sm">
-                    <Button variant="ghost" size="sm" className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="flex items-center gap-1 text-muted-foreground">
                       <ThumbsUp className="w-4 h-4" />
                       <span>{comment.likesCount}</span>
                     </Button>
                   </div>
-                  {!post.isSolved && !comment.isAccepted && (
-                    <Button variant="outline" size="sm">채택하기</Button>
+                  {!comment.isAccepted && post.author?.id === 'current-user-id' && (
+                    <Button variant="outline" size="sm">답변 채택하기</Button>
                   )}
                 </CardFooter>
               </Card>
             ))}
-            
-            {comments.length === 0 && (
-              <div className="flex items-center justify-center py-8 bg-muted rounded-lg">
-                <p className="text-muted-foreground">아직 답변이 없습니다. 첫 번째 답변을 작성해보세요!</p>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* 관련 질문 */}
-        <div>
-          <h2 className="text-xl font-bold mb-4">관련 질문</h2>
-          <div className="grid grid-cols-1 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">TypeScript와 JavaScript의 성능 차이가 있나요?</CardTitle>
-              </CardHeader>
-              <CardFooter className="flex justify-between text-sm text-muted-foreground">
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1">
-                    <MessageSquare className="w-4 h-4" />
-                    5
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-4 h-4" />
-                    87
-                  </span>
-                </div>
-                <span>2일 전</span>
-              </CardFooter>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Next.js 13에서 14로 마이그레이션 팁</CardTitle>
-              </CardHeader>
-              <CardFooter className="flex justify-between text-sm text-muted-foreground">
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1">
-                    <MessageSquare className="w-4 h-4" />
-                    8
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-4 h-4" />
-                    112
-                  </span>
-                </div>
-                <span>4일 전</span>
-              </CardFooter>
-            </Card>
           </div>
         </div>
       </div>
