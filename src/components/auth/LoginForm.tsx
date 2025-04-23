@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 // 로그인 폼 유효성 검사 스키마
 const loginSchema = z.object({
@@ -21,6 +23,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn, loginWithOAuth } = useAuth();
+  const router = useRouter();
   
   const {
     register,
@@ -40,6 +43,20 @@ export default function LoginForm() {
       setIsLoading(true);
       await signIn(data.email, data.password);
       reset();
+      
+      // 세션이 설정되었는지 확인
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('로그인 후 세션 확인:', {
+        hasSession: !!sessionData.session,
+        user: sessionData.session?.user?.email
+      });
+      
+      // 로그인 성공 시 페이지 새로고침 후 홈으로 이동
+      // 이렇게 하면 세션이 제대로 적용됩니다
+      toast.success('로그인 성공! 메인 페이지로 이동합니다.');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
     } catch (error) {
       console.error('로그인 오류:', error);
     } finally {
@@ -51,6 +68,19 @@ export default function LoginForm() {
     try {
       setIsLoading(true);
       await loginWithOAuth(provider);
+      
+      // 세션이 설정되었는지 확인
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('OAuth 로그인 후 세션 확인:', {
+        hasSession: !!sessionData.session,
+        user: sessionData.session?.user?.email
+      });
+      
+      // OAuth 로그인 성공 시에도 페이지 새로고침 후 홈으로 이동
+      toast.success('로그인 성공! 메인 페이지로 이동합니다.');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
     } catch (error) {
       console.error(`${provider} 로그인 오류:`, error);
       toast.error(`${provider} 로그인에 실패했습니다.`);

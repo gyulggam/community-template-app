@@ -40,13 +40,17 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col items-center justify-center`}
       >
         <AuthProvider>
-          <Navigation />
-          <main className="flex-1">
-            {children}
-          </main>
+          <div className="flex-1 flex flex-col w-full">
+            <div className="w-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-1">
+              <Navigation />
+            </div>
+            <main className="flex-1 w-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-1">
+              {children}
+            </main>
+          </div>
           <Toaster />
         </AuthProvider>
       </body>
